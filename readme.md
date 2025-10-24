@@ -1,8 +1,8 @@
 # 🅿️ ParkSense - IoT Parking Occupancy System
 ## ⚠️ Work In Progress ⚠️
 
-**ParkSense**is an IoT-based parking management system that detects whether parking spots are occupied and reports that data to a cloud database in real time.  
-Each parking sensor (real or simulated) publishes data via**MQTT**, which is then collected by a backend service and stored in**InfluxDB**for visualisation in tools like**Grafana**.
+**ParkSense** is an IoT-based parking management system that detects whether parking spots are occupied and reports that data to a cloud database in real time.  
+Each parking sensor (real or simulated) publishes data via **MQTT**, which is then collected by a backend service and stored in **InfluxDB** for visualisation in tools like**Grafana**.
 
 ## 📁 Project Structure
 
