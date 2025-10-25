@@ -8,6 +8,7 @@ const int trigPin = 5;
 const int echoPin = 14;
 const int redLEDPin = 19;   // Red LED pin
 const int greenLEDPin = 18; // Green LED pin
+const int blueLEDPin = 21;  // Blue LED pin
 
 // define sound speed in cm/uS
 #define SOUND_SPEED 0.034
@@ -16,6 +17,8 @@ long duration;
 float distanceCm;
 bool occupied = false;
 bool lastOccupied = false;
+int occupiedThresholdCm = 12; // distance threshold to consider the parking spot occupied
+bool disabledPark = false; // whether this parking spot is a disabled park
 
 // just using the public MQTT broker for now.
 // this could all be in secrets.h it's essentially an environment variable
@@ -40,6 +43,7 @@ void setup() {
 
   pinMode(redLEDPin, OUTPUT);
   pinMode(greenLEDPin, OUTPUT);
+  pinMode(blueLEDPin, OUTPUT);
 
   WiFi.begin(WIFI_SSID, WIFI_PASS); // these shoud be defined in secrets.h
   Serial.print("Connecting to ");
@@ -95,16 +99,25 @@ void loop() {
   Serial.print("Distance (cm): ");
   Serial.println(distanceCm);
   
-  if (distanceCm < 20) {
+  if (distanceCm < occupiedThresholdCm) {
     Serial.println("Occupied");
     occupied = true;
     digitalWrite(redLEDPin, HIGH);
     digitalWrite(greenLEDPin, LOW);
+    digitalWrite(blueLEDPin, LOW);
   } else {
     Serial.println("Unoccupied");
     occupied = false;
-    digitalWrite(redLEDPin, LOW);
-    digitalWrite(greenLEDPin, HIGH);
+    if (disabledPark) {
+      digitalWrite(redLEDPin, LOW);
+      digitalWrite(greenLEDPin, LOW);
+      digitalWrite(blueLEDPin, HIGH);
+    } else {
+      digitalWrite(redLEDPin, LOW);
+      digitalWrite(greenLEDPin, HIGH);
+      digitalWrite(blueLEDPin, LOW);
+    }
+    
   }
   if (occupied != lastOccupied) {
     publishOccupancy(occupied);
@@ -120,11 +133,20 @@ void callback(char* topic, byte* payload, unsigned int length){
   Serial.print(". Message: ");
   String message;
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
     message += (char)payload[i];
   }
   Serial.println(message);
-
+  if (String(topic) == "parkSenseUTS/msgIn/A1/disabled_park") {
+    if (message == "1") {
+      Serial.println("This parking spot is now marked as a disabled park.");
+      disabledPark = true;
+    } else if (message == "0") {
+      Serial.println("This parking spot is now marked as a normal park.");
+      disabledPark = false;
+    } else {
+      Serial.println("Invalid message for disabled park status.");
+    } 
+  }
 }
 
 void publishOccupancy(bool occupied) {
