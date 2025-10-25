@@ -6,12 +6,16 @@
 
 const int trigPin = 5;
 const int echoPin = 14;
+const int redLEDPin = 19;   // Red LED pin
+const int greenLEDPin = 18; // Green LED pin
 
 // define sound speed in cm/uS
 #define SOUND_SPEED 0.034
 
 long duration;
 float distanceCm;
+bool occupied = false;
+bool lastOccupied = false;
 
 // just using the public MQTT broker for now.
 // this could all be in secrets.h it's essentially an environment variable
@@ -26,6 +30,8 @@ PubSubClient client(espClient);
 
 void callback(char* topic, byte* payload, unsigned int length);
 void connect();
+
+void publishOccupancy(bool occupied);
 
 void setup() {
   Serial.begin(115200);
@@ -85,7 +91,22 @@ void loop() {
   
   Serial.print("Distance (cm): ");
   Serial.println(distanceCm);
-
+  
+  if (distanceCm < 20) {
+    Serial.println("Occupied");
+    occupied = true;
+    digitalWrite(redLEDPin, HIGH);
+    digitalWrite(greenLEDPin, LOW);
+  } else {
+    Serial.println("Unoccupied");
+    occupied = false;
+    digitalWrite(redLEDPin, LOW);
+    digitalWrite(greenLEDPin, HIGH);
+  }
+  if (occupied != lastOccupied) {
+    publishOccupancy(occupied);
+    lastOccupied = occupied;
+  }
   delay(1000);
 }
 
@@ -101,6 +122,24 @@ void callback(char* topic, byte* payload, unsigned int length){
   }
   Serial.println(message);
 
+}
+
+void publishOccupancy(bool occupied) {
+  if (!client.connected()) {
+    Serial.println("MQTT not connected, skipping occupancy publish");
+    return;
+  }
+  const char* pubTopic = "parkSenseUTS/msgOut/occupied/A1"; // TODO: make this respect the actual parking spot ID and topic
+  const char* payload = occupied ? "1" : "0";
+  bool ok = client.publish(pubTopic, payload);
+  if (!ok) {
+    Serial.println("Publish failed");
+  } else {
+    Serial.print("Published occupancy ");
+    Serial.print(payload);
+    Serial.print(" to ");
+    Serial.println(pubTopic);
+  }
 }
 
 void connect(){
