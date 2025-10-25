@@ -38,6 +38,9 @@ void setup() {
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
 
+  pinMode(redLEDPin, OUTPUT);
+  pinMode(greenLEDPin, OUTPUT);
+
   WiFi.begin(WIFI_SSID, WIFI_PASS); // these shoud be defined in secrets.h
   Serial.print("Connecting to ");
   Serial.print(WIFI_SSID);
