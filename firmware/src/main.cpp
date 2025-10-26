@@ -2,13 +2,16 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include <secrets.h> // INFO: Edit this or the project will not function
+#include <secrets.h> // INFO: Edit this or the project will not function4
+#include <time.h>
 
 const int trigPin = 5;
 const int echoPin = 14;
 const int redLEDPin = 19;   // Red LED pin
 const int greenLEDPin = 18; // Green LED pin
 const int blueLEDPin = 21;  // Blue LED pin
+
+const char* deviceID = "A1"; // Unique ID for this parking sensor device. Indexes to a specific parking spot
 
 // define sound speed in cm/uS
 #define SOUND_SPEED 0.034
@@ -17,7 +20,7 @@ long duration;
 float distanceCm;
 bool occupied = false;
 bool lastOccupied = false;
-int occupiedThresholdCm = 12; // distance threshold to consider the parking spot occupied
+int occupiedThresholdCm = 13; // distance threshold to consider the parking spot occupied. this isn't universal, i have just set it based on my testing of my model setup
 bool disabledPark = false; // whether this parking spot is a disabled park
 
 // just using the public MQTT broker for now.
@@ -55,6 +58,9 @@ void setup() {
   Serial.print("\nConnected to WiFi with local IP: ");
   Serial.println(WiFi.localIP());
 
+  // Initialize NTP. If time isn't available when publishing, publishOccupancy() falls back to millis()/1000.
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+
   // TODO: maybe tie the client ID to the position in the parking area or something like that?
   clientID = "parkSenseUTS-";
   clientID += WiFi.macAddress();
@@ -72,17 +78,20 @@ void setup() {
     }
   }
   // The device will light a green LED for an unoccupied normal park and a blue LED for an unoccupied disabled park
-  // Whether a given parking spot is disabled should be user configurable
-  client.subscribe("parkSenseUTS/msgIn/A1/disabled_park");
+    // Whether a given parking spot is disabled should be user configurable
+    {
+      String subTopic = String("parkSenseUTS/msgIn/") + deviceID + "/disabled_park";
+      client.subscribe(subTopic.c_str());
+    }
 }
 
 void loop() {
   if (!client.connected()) {
     connect();
   }
-  // we had issues with callbacks when this wasn't in a serial.print and i'm not sure why
-  // the control flow makes no sense but it only worked like this
-  Serial.println(client.loop());
+  // process incoming MQTT packets and give background tasks a moment to run
+  client.loop();
+  delay(1);
 
   // sets the trigPin LOW
   digitalWrite(trigPin, LOW);
@@ -136,7 +145,7 @@ void callback(char* topic, byte* payload, unsigned int length){
     message += (char)payload[i];
   }
   Serial.println(message);
-  if (String(topic) == "parkSenseUTS/msgIn/A1/disabled_park") {
+  if (String(topic) == "parkSenseUTS/msgIn/" + String(deviceID) + "/disabled_park") {
     if (message == "1") {
       Serial.println("This parking spot is now marked as a disabled park.");
       disabledPark = true;
@@ -154,16 +163,33 @@ void publishOccupancy(bool occupied) {
     Serial.println("MQTT not connected, skipping occupancy publish");
     return;
   }
-  const char* pubTopic = "parkSenseUTS/msgOut/occupied/A1"; // TODO: make this respect the actual parking spot ID and topic
-  const char* payload = occupied ? "1" : "0";
-  bool ok = client.publish(pubTopic, payload);
+
+  // Build topic: parkSenseUTS/msgOut/occupied/<deviceID>
+  String pubTopic = String("parkSenseUTS/msgOut/occupied/") + String(deviceID);
+
+  // Get timestamp. Prefer system time (NTP). If not synced, fall back to uptime seconds.
+  uint32_t ts = (uint32_t)time(nullptr);
+  if (ts < 1000000000u) { // unlikely to be a valid epoch -> fallback
+    ts = (uint32_t)(millis() / 1000);
+  }
+
+  // Build compact JSON payload: {"device_id":"A1","occupied":1,"ts":1234567890}
+  StaticJsonDocument<128> doc;
+  doc["device_id"] = deviceID;
+  doc["occupied"] = occupied ? 1 : 0;
+  doc["ts"] = ts;
+
+  char buf[128];
+  size_t n = serializeJson(doc, buf, sizeof(buf));
+
+  bool ok = client.publish(pubTopic.c_str(), buf, n);
   if (!ok) {
     Serial.println("Publish failed");
   } else {
-    Serial.print("Published occupancy ");
-    Serial.print(payload);
-    Serial.print(" to ");
-    Serial.println(pubTopic);
+    Serial.print("Published occupancy to ");
+    Serial.print(pubTopic);
+    Serial.print(": ");
+    Serial.println(buf);
   }
 }
 
@@ -171,7 +197,8 @@ void connect(){
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
     if (client.connect(clientID.c_str())) {
-      client.subscribe("parkSenseUTS/msgIn/A1/disabled_park");
+      String subTopic = String("parkSenseUTS/msgIn/") + String(deviceID) + "/disabled_park";
+      client.subscribe(subTopic.c_str());
       Serial.println("Connected");
     }
     else {
