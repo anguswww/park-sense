@@ -1,0 +1,82 @@
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=${INFLUX_USERNAME}
+      - DOCKER_INFLUXDB_INIT_PASSWORD=${INFLUX_PASSWORD}
+      - DOCKER_INFLUXDB_INIT_ORG=${INFLUX_ORG}
+      - DOCKER_INFLUXDB_INIT_BUCKET=${INFLUX_BUCKET}
+      - DOCKER_INFLUXDB_INIT_RETENTION=${INFLUX_RETENTION}
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    environment:
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+
+  telegraf:
+    image: telegraf:1.30
+    container_name: telegraf
+    depends_on:
+      - influxdb
+      - mosquitto
+    volumes:
+      - ./telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    environment:
+      - INFLUX_HOST=influxdb
+      - INFLUX_PORT=8181
+      - INFLUX_TOKEN=${INFLUX_TOKEN}
+      - INFLUX_BUCKET=${INFLUX_BUCKET}
+      - INFLUX_ORG=${INFLUX_ORG}
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - influxdb
+
+  esp32-simulator:
+    build: ./esp32-simulator
+    container_name: esp32-simulator
+    volumes:
+      - ./esp32-simulator:/app
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_USERNAME}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+      - SINE_PERIOD_SEC=${SINE_PERIOD_SEC}
+      - NOISE_AMPLITUDE=${NOISE_AMPLITUDE}
+      - OCCUPANCY_THRESHOLD=${OCCUPANCY_THRESHOLD}
+    command: ["python", "main.py"]
+
+volumes:
+  influxdb-data:
+  mosquitto-data:
+  mosquitto-log:
+  grafana-data:

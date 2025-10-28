@@ -12,14 +12,14 @@ import time
 load_dotenv()
 
 # --- Config from .env ---
-BROKER = os.getenv("MQTT_BROKER", "broker.emqx.io")
+BROKER = os.getenv("MQTT_BROKER", "mosquitto")
 PORT = int(os.getenv("MQTT_PORT", 1883))
-USERNAME = os.getenv("MQTT_USERNAME")
-PASSWORD = os.getenv("MQTT_PASSWORD")
+USERNAME = os.getenv("MQTT_USERNAME", "")
+PASSWORD = os.getenv("MQTT_PASSWORD", "")
 ROWS = "A-D"
 SPOTS_PER_ROW = 20
 TOPIC_ROOT = "parkSenseUTS/msgOut/occupied"
-PUBLISH_INTERVAL = float(os.getenv("PUBLISH_INTERVAL_SEC", 1.0))
+PUBLISH_INTERVAL = 1.0
 SINE_PERIOD = float(os.getenv("SINE_PERIOD_SEC", 60.0))
 NOISE = float(os.getenv("NOISE_AMPLITUDE", 0.15))
 THRESHOLD = float(os.getenv("OCCUPANCY_THRESHOLD", 0.5))
